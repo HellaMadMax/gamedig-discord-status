@@ -15,7 +15,7 @@ function GameServer (options) {
 	this.info = {name: "", map: "", password: false, maxplayers: 0, players: [], bots: [], connect: "", ping: 0, time: 0}
 	this.error = ""
 	this.activity = ""
-	this.online = false
+	this.online = true
 	this.getActivity = () => {
 		if (this.error !== "") {
 			return "Server Offline"

@@ -1,6 +1,6 @@
 {
 	"name": "gamedig-discord-status",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "Update discord bot status with game server player count",
 	"main": "server.js",
 	"scripts": {
