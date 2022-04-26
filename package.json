@@ -1,0 +1,19 @@
+{
+	"name": "gamedig-discord-status",
+	"version": "0.1.0",
+	"description": "Update discord bot status with game server player count",
+	"main": "server.js",
+	"scripts": {
+		"master": "node cmd_master.js",
+		"query": "node cmd_query.js",
+		"createmsg": "node cmd_createmsg.js"
+	},
+	"repository": "github:HellaMadMax/gamedig-discord-status",
+	"author": "HellaMadMax",
+	"license": "MIT",
+	"dependencies": {
+		"discord.js": "^13.6.0",
+		"gamedig": "^4.0.2",
+		"steam-server-query": "^1.1.3"
+	}
+}
