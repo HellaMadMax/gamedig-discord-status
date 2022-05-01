@@ -16,6 +16,7 @@ client.login(token).then(() => {
 		console.log(new Date().toLocaleString() + " - found discord channel (" + channel.name + ")")
 		channel.send("placeholder").then((message) => {
 			console.log(new Date().toLocaleString() + " - created discord message (" + message.id + ")")
+			client.destroy()
 		}).catch((error) => {
 			console.error(new Date().toLocaleString() + " - failed to send discord message (" + error + ")")
 		})

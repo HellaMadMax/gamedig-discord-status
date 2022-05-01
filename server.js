@@ -1,153 +1,195 @@
 const DiscordJS = require("discord.js")
 const GameDig = require("gamedig")
 function GameServer (options) {
-	this.id = options.host + ":" + options.port
-	this.interval = 30000
-	if (options.interval) {
-		this.interval = options.interval
-		delete options.interval
+	this.options = {id: options.host + ":" + options.port, interval: 30000, client: null, login: "", updateActivity: false, updateMessage: false, channelID: "", messageID: "", reportDown: false, reportChannelID: "", reportPrefixDown: "", reportPrefixUp: ""}
+	if (typeof(options) == "string") {
+		this.options.login = options
+	} else if (typeof(options) == "object" && options.constructor.name == "Client") {
+		this.options.client = options
+	} else if (typeof(options) == "object") {
+		Object.assign(this.options, options)
 	}
-	this.getMap = (map) => {
-		return map
-	}
-	this.options = options
-	this.discord = {client: null, login: "", updateActivity: false, editMsg: false, channelID: "", msgID: "", reportDown: false, reportChannelID: "", reportPrefixDown: "", reportPrefixUp: ""}
-	this.info = {name: "", map: "", password: false, maxplayers: 0, players: [], bots: [], connect: "", ping: 0, time: 0}
-	this.error = ""
+	this.GameDig = new GameDig()
 	this.activity = ""
+	this.error = ""
+	this.info = {name: "(Unknown)", map: "(Unknown)", password: false, maxplayers: 0, players: [], bots: [], connect: "", ping: 0, raw: {}, time: 0}
 	this.online = true
+	this.mapNames = new Map()
+	this.addMap = (map, name) => {
+		this.mapNames.set(map, name)
+		return this
+	}
+	this.getMap = (map) => this.mapNames.get(map) || map
 	this.getActivity = () => {
-		if (this.error !== "") {
+		if (this.error) {
 			return "Server Offline"
 		}
-		let activity = this.info.players.length + "/" + this.info.maxplayers
+		let players = this.info.players.length
+		if (this.info.bots.length > 0) {
+			players = players + " (" + this.info.bots.length + ")"
+		}
+		let activity = players + "/" + this.info.maxplayers
 		let map = this.getMap(this.info.map)
-		if (map !== "") {
+		if (map) {
 			activity += " on " + map
 		}
 		return activity
 	}
+	this.updateActivity = async (activity) => {
+		if (this.options.client === null) {
+			console.error(new Date().toLocaleString() + " - '" + this.options.id + "' - cannot update discord activity (not logged in)")
+			return
+		}
+		try {
+			await this.options.client.user.setActivity({name: activity, type: 3})
+		} catch (error) {
+			console.error(new Date().toLocaleString() + " - '" + this.options.id + "' - failed to update discord activity (" + error + ")")
+		}
+	}
 	this.getMessage = (message) => {
-		let embed = new DiscordJS.MessageEmbed().setTitle(this.info.name)
-		if (this.error !== "") {
-			embed.addField("Status", "Offline (" + this.error + ")")
+		let game = this.GameDig.queryRunner.gameResolver.gamesByKey.get(this.options.type)
+		let embed = new DiscordJS.MessageEmbed().setTitle(this.options.id)
+		if (this.error) {
+			embed.setDescription("**Status:** Offline (" + this.error + ")").setColor("#ff0000")
 		} else {
-			embed.addField("Status", "Online")
-			embed.addField("IP Address", this.info.connect)
-			let map = this.getMap(this.info.map)
-			if (map !== "") {
-				embed.addField("Map", map)
-			}
-			embed.addField("Players", this.info.players.length + "/" + this.info.maxplayers, true)
+			embed.setDescription("**Status:** Online").setColor("#00ff00")
+		}
+		embed.addField("Name", this.info.name)
+		if ((this.options.type == "protocol-valve" || game.options.protocol == "valve") && this.info.connect) {
+			embed.addField("IP Address", "steam://connect/" + this.info.connect)
+		} else {
+			embed.addField("IP Address", this.info.connect || options.host + ":" + options.port)
+		}
+		let gameName = this.info.raw.game
+		if (!gameName && game.pretty) {
+			gameName = game.pretty.replace(/ \(\d\d\d\d\)/g, "") // remove year on the end
+		}
+		embed.addField("Game", gameName || "(Unknown)")
+		let map = this.getMap(this.info.map)
+		if (map) {
+			embed.addField("Map", map, true)
+		}
+		if (this.info.maxplayers > 0) {
+			let players = this.info.players.length
 			if (this.info.bots.length > 0) {
-				embed.addField("Bots", this.info.bots.length.toString(), true)
+				players = players + " (" + this.info.bots.length + ")"
 			}
+			embed.addField("Players", players + "/" + this.info.maxplayers, true)
 		}
 		msg = {content: null, embeds: [embed]}
-		if (message != "") {
+		if (message) {
 			msg.content = message
 		}
 		return msg
 	}
 	this.sendMessage = async (message) => {
-		if (this.discord.client !== null && this.discord.reportDown) {
-			let channel
-			try {
-				channel	= await this.discord.client.channels.fetch(this.discord.reportChannelID || this.discord.channelID)
-			} catch (error) {
-				console.error(new Date().toLocaleString() + " - '" + this.id + "' - failed to get discord channel (" + error + ")")
-				return
-			}
-			
-			let msg
-			try {
-				msg = await channel.send(this.getMessage(message))
-			} catch (error) {
-				console.error(new Date().toLocaleString() + " - '" + this.id + "' - failed to send discord message (" + error + ")")
-				return
-			}
+		if (this.options.client === null) {
+			console.error(new Date().toLocaleString() + " - '" + this.options.id + "' - cannot send discord message (not logged in)")
+			return
+		}
+		if ((this.options.reportChannelID || this.options.channelID) == "") {
+			console.error(new Date().toLocaleString() + " - '" + this.options.id + "' - cannot send discord message (missing channelID)")
+			return
+		}
+		let channel
+		try {
+			channel	= await this.options.client.channels.fetch((this.options.reportChannelID || this.options.channelID))
+		} catch (error) {
+			console.error(new Date().toLocaleString() + " - '" + this.options.id + "' - failed to get discord channel (" + error + ")")
+			return
+		}
+		let msg
+		try {
+			msg = await channel.send(this.getMessage(message))
+		} catch (error) {
+			console.error(new Date().toLocaleString() + " - '" + this.options.id + "' - failed to send discord message (" + error + ")")
+			return
 		}
 	}
-	this.query = async (discordopt) => {
-		if (typeof(discordopt) == "string") {
-			this.discord.login = discordopt
-		} else if (typeof(discordopt) == "object" && discordopt.constructor.name == "Client") {
-			this.discord.client = discordopt
-		} else if (typeof(discordopt) == "object") {
-			Object.assign(this.discord, discordopt)
+	this.updateMessage = async () => {
+		if (this.options.client === null) {
+			console.error(new Date().toLocaleString() + " - '" + this.options.id + "' - cannot edit discord message (not logged in)")
+			return
 		}
-		if (this.discord.client === null && this.discord.login !== "") {
-			this.discord.client = new DiscordJS.Client({intents: 0})
+		if (this.options.channelID == "") {
+			console.error(new Date().toLocaleString() + " - '" + this.options.id + "' - cannot edit discord message (missing channelID)")
+			return
+		}
+		if (this.options.messageID == "") {
+			console.error(new Date().toLocaleString() + " - '" + this.options.id + "' - cannot edit discord message (missing messageID)")
+			return
+		}
+		let channel
+		try {
+			channel	= await this.options.client.channels.fetch(this.options.channelID)
+		} catch (error) {
+			console.error(new Date().toLocaleString() + " - '" + this.options.id + "' - failed to get discord channel (" + error + ")")
+			return
+		}
+		let message
+		try {
+			message = await channel.messages.fetch(this.options.messageID)
+		} catch (error) {
+			console.error(new Date().toLocaleString() + " - '" + this.options.id + "' - failed to get discord message (" + error + ")")
+			return
+		}
+		let edit
+		try {
+			edit = await message.edit(this.getMessage())
+		} catch (error) {
+			console.error(new Date().toLocaleString() + " - '" + this.options.id + "' - failed to edit discord message (" + error + ")")
+			return
+		}
+	}
+	this.query = async () => {
+		if (this.options.client === null && this.options.login !== "") {
+			this.options.client = new DiscordJS.Client({intents: 0})
 			try {
-				await this.discord.client.login(this.discord.login)
-				console.log(new Date().toLocaleString() + " - '" + this.id + "' - logged into discord (" + this.discord.client.user.tag + ")")
+				await this.options.client.login(this.options.login)
+				console.log(new Date().toLocaleString() + " - '" + this.options.id + "' - logged into discord (" + this.options.client.user.tag + ")")
 			} catch(error) {
-				console.error(new Date().toLocaleString() + " - '" + this.id + "' - failed to log into discord (" + error + ")")
+				console.error(new Date().toLocaleString() + " - '" + this.options.id + "' - failed to log into discord (" + error + ")")
 				if (error.code == "TOKEN_INVALID") {
-					console.error(new Date().toLocaleString() + " - '" + this.id + "' - disabling discord login due to fatal error")
-					this.discord.login = ""
+					console.error(new Date().toLocaleString() + " - '" + this.options.id + "' - disabling discord login due to invalid token")
+					this.options.login = ""
 				}
-				this.discord.client = null
+				this.options.client = null
 			}
 		}
 		try {
-			let data = await GameDig.query(this.options)
+			let data = await this.GameDig.queryRunner.run(this.options)
 			data.time = Date.now()
 			this.info = data
 			this.error = ""
-			this.id = this.info.connect + " (" + this.info.name + ")"
 		} catch (error) {
 			this.error = error
 		}
-		this.timeout = setTimeout(() => this.query(), this.interval)
+		this.timeout = setTimeout(() => this.query(), this.options.interval)
 		let activity = this.getActivity()
 		if (this.error !== "") {
-			console.error(new Date().toLocaleString() + " - '" + this.id + "' - " + this.error)
+			console.error(new Date().toLocaleString() + " - '" + this.options.id + "' - " + this.error)
 			if (this.online) {
-				await this.sendMessage(this.discord.reportPrefixDown)
+				this.online = false
+				if (this.options.reportDown) {
+					await this.sendMessage(this.options.reportPrefixDown)
+				}
 			}
-			this.online = false
 		} else {
-			console.log(new Date().toLocaleString() + " - '" + this.id + "' - " + activity)
+			console.log(new Date().toLocaleString() + " - '" + this.options.id + "' - " + activity)
 			if (!this.online) {
-				await this.sendMessage(this.discord.reportPrefixUp)
-			}
-			this.online = true
-		}
-		if (this.activity === activity) {
-			return
-		}
-		this.activity = activity
-		if (this.discord.client !== null && this.discord.updateActivity) {
-			try {
-				await this.discord.client.user.setActivity({name: activity, type: 3})
-			} catch (error) {
-				console.error(new Date().toLocaleString() + " - '" + this.id + "' - failed to update discord status (" + error + ")")
+				this.online = true
+				if (this.options.reportDown) {
+					await this.sendMessage(this.options.reportPrefixUp)
+				}
 			}
 		}
-		if (this.discord.client !== null && this.discord.editMsg && this.discord.channelID !== "" && this.discord.msgID !== "") {
-			let channel
-			try {
-				channel	= await this.discord.client.channels.fetch(this.discord.channelID)
-			} catch (error) {
-				console.error(new Date().toLocaleString() + " - '" + this.id + "' - failed to get discord channel (" + error + ")")
-				return
+		if (this.activity !== activity) { // only update when player count/map has changed
+			this.activity = activity
+			if (this.options.updateActivity) {
+				await this.updateActivity(activity)
 			}
-			
-			let message
-			try {
-				message = await channel.messages.fetch(this.discord.msgID)
-			} catch (error) {
-				console.error(new Date().toLocaleString() + " - '" + this.id + "' - failed to get discord message (" + error + ")")
-				return
-			}
-			
-			let edit
-			try {
-				edit = await message.edit(this.getMessage())
-			} catch (error) {
-				console.error(new Date().toLocaleString() + " - '" + this.id + "' - failed to edit discord message (" + error + ")")
-				return
+			if (this.options.updateMessage) {
+				await this.updateMessage()
 			}
 		}
 	}
