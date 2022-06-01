@@ -12,14 +12,12 @@ Can also report if the game server has gone down and send a discord message to r
 npm install gamedig-discord-status
 ```
 ```javascript
-const GameServer = require('gamedig-discord-status').GameServer
+const GameServer = require('gamedig-discord-status')
 let hll1 = new GameServer({
 	id: "Official Hell Let Loose Aus #1",
 	type: "hll",
 	host: "176.57.135.34",
 	port: 28015,
-	maxAttempts: 4,
-	socketTimeout: 6000,
 	login: "token",
 	updateActivity: true,
 	updateMessage: true,
@@ -35,15 +33,26 @@ let hll1 = new GameServer({
 
 ### GameServer options
 
-Most of the options are [gamedig query options](https://github.com/gamedig/node-gamedig#query-options) (type, host and port are required) with the addition of:
+Most of the options are [gamedig query options](https://github.com/gamedig/node-gamedig#query-options) (**host** and **port** are required) with a few different defaults:
+* **type**: "protocol-valve"
+* **maxAttempts**: 4
+* **socketTimeout**: 6000
+* **givenPortOnly**: true
+
+Non-GameDig options:
 * **id**: string - Identifier for the server to show in logs and message title. Defaults to query IP:Port
-* **interval**: number - Milliseconds to wait between queries. Defaults to 30000 (30 seconds)
+* **interval**: number - Milliseconds to wait between queries. Defaults to 30 * 1000 (30 seconds)
 * **client**: object - Directly pass a discord.js client object to be used instead of it being automatically created
-* **login**: string - Discord Login token
+* **token**: string - Discord Bot login token. They can be created [here](https://discord.com/developers/applications)
+* **discordDebug**: boolean - Enables debug logging for discord client
+* **logDebug**: boolean - console.log on updateActivity, updateMessage and sendMessage
+* **logActivity**: boolean - console.log on activity change
 * **updateActivity**: boolean - Update discord bot activity with player count
 * **updateMessage**: boolean - Update discord message with player count (requires both ChannelID and MessageID)
+* **updateInterval**: number - Milliseconds to wait before calling updateActivity even when activity text hasn't changed. Needed due to discord clearing activity after awhile of not reciving updates. Defaults to 30 * 60000 (30 minutes)
 * **channelID**: string - Discord channel ID
-* **messageID**: string - Discord message ID (MUST BE FROM CURRENT BOT TO WORK)
+* **messageID**: string - Discord message ID (MUST BE POSTED FROM DISCORD BOT ACCOUNT TO EDIT)
+* **messageLinkIP**: boolean - Add steam://connect/ to ip address field in discord message (if game uses valve protocol). Defaults to true
 * **reportDown**: boolean - Report when a server stops responding to queries, and when it starts doing so again
 * **reportChannelID**: string - Use this channel instead of channelID when sending down reports
 * **reportPrefixDown**: string - Prefix this message when reporting server not responding, useful for mentions
@@ -53,7 +62,7 @@ Most of the options are [gamedig query options](https://github.com/gamedig/node-
 
 You can either use **addMap** to add exact map names:
 ```javascript
-const GameServer = require('gamedig-discord-status').GameServer
+const GameServer = require('gamedig-discord-status')
 let hll1 = new GameServer({id: "Official Hell Let Loose Aus #1", type: "hll", host: "176.57.135.34", port: 28015})
 .addMap("CT", "Carentan")
 .addMap("Hill400", "Hill 400")
@@ -66,50 +75,35 @@ let hll1 = new GameServer({id: "Official Hell Let Loose Aus #1", type: "hll", ho
 .addMap("Utah", "Utah Beach")
 .query()
 ```
-Or you can override **getMap** and format it with code
+Or use **getMap** event to format it programmatically
 ```javascript
-.getMap = function(map) {
-	return map.substr(3)
-}
+.on("getMap", function(event) {
+	if (event.map == "de_") {
+		event.map = event.map.substr(3)
+	}
+})
 ```
 
-### Activity/Message formatting
+### Events
 
-You can override the below 2 functions to change what shows in the bot activity or discord message
-* **getActivity** () - used to format activity when updateActivity is enabled
-* **getMessage** (message) - used to format discord messages when sending or editing them
-
-Activity french translation example:
-```javascript
-.getActivity = function() {
-	if (this.error) {
-		return "Serveur Hors-ligne" // Server Offline
-	}
-	let players = this.info.players.length
-	if (this.info.bots.length > 0) {
-		players = players + " (" + this.info.bots.length + ")"
-	}
-	let activity = players + "/" + this.info.maxplayers
-	let map = this.getMap(this.info.map)
-	if (map) {
-		activity += " sur " + map // on
-	}
-	return activity
-}
-```
-Non-embed Discord message example:
-```javascript
-.getMessage = function(message) {
-	let msg = this.info.name + ": " + this.info.players.length + "/" + this.info.maxplayers + " players on " + this.getMap(this.info.map)
-	if (this.error) {
-		msg = this.info.name + ": Offline"
-	}
-	if (message) {
-		msg = message + "\n" + msg
-	}
-	return msg
-}
-```
+* **getMap** (event) - used by **getActivity**/**getMessage** for map
+* **getGame** (event) - used by **getMessage** for game field
+* **getActivity** (activity) - used to format activity when **updateActivity** is enabled
+* **getMessage** (message) - used to format discord messages when sending or editing them (**updateMessage**/**reportDown**/**reportUp**)
+* **updateActivity** (activity) - when **updateActivity** is called
+* **updatedActivity** (activity, presence) - after **updateActivity** is called (**presence** is return value of client.setActivity)
+* **updateMessage** (newMessage) - when **updateMessage** is called
+* **updatedMessage** (newMessage, edit) - after **updateMessage** is called (**edit** is return value of message.edit)
+* **sendMessage** (message) - when **sendMessage** is called
+* **sentMessage** (message, sent) - after **sendMessage** is called (**sent** is return value of channel.send)
+* **discordLogin** (client) - after discord client has logged in
+* **discordLoginError** (error) - error while logging into discord
+* **query** (query) - after receiving a valid query response from gamedig
+* **queryError** (error) - error getting query from gamedig
+* **activityChange** (from, to) - when activity text has changed
+* **messageChange** (from, to) - when message text has changed
+* **reportDown** () - after **queryError** when previous response was valid
+* **reportUp** () - after **query** when previous response was error
 
 ## Notes
 

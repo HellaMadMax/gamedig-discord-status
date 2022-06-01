@@ -1,32 +1,22 @@
 let token = process.argv[2]
 if (typeof(token) == "undefined" || token == "") {
 	console.error("missing token")
-	return
+	process.exit(1)
 }
 let channelid = process.argv[3]
 if (typeof(channelid) == "undefined" || channelid == "") {
 	console.error("missing channelid")
-	return
+	process.exit(1)
 }
-const DiscordJS = require("discord.js")
-let client = new DiscordJS.Client({intents: 0})
-client.login(token).then(() => {
-	console.log(new Date().toLocaleString() + " - logged into discord (" + client.user.tag + ")")
-	client.channels.fetch(channelid).then((channel) => {
-		console.log(new Date().toLocaleString() + " - found discord channel (" + channel.name + ")")
-		channel.send("placeholder").then((message) => {
-			console.log(new Date().toLocaleString() + " - created discord message (" + message.id + ")")
-			client.destroy()
-		}).catch((error) => {
-			console.error(new Date().toLocaleString() + " - failed to send discord message (" + error + ")")
-		})
-	}).catch((error) => {
-		console.error(new Date().toLocaleString() + " - failed to get discord channel (" + error + ")")
-	})
-}).catch((error) => {
-	console.error(new Date().toLocaleString() + " - failed to log into discord (" + error + ")")
-	if (error.code == "TOKEN_INVALID") {
-		console.error(new Date().toLocaleString() + " - stopping due to fatal error")
-		return
-	}
-})
+const DiscordJS = require("discord.js");
+(async () => {
+	let client = new DiscordJS.Client({intents: 0})
+	await client.login(token)
+	console.log(new Date().toLocaleString() + " - '" + client.user.tag + "' logged into discord")
+	let channel = await client.channels.fetch(channelid)
+	let guild = await channel.guild.fetch()
+	console.log(new Date().toLocaleString() + " - found discord channel '" + channel.name + "' (" + channel.id + ") in guild '" + guild.name + "' (" + guild.id + ")")
+	let message = await channel.send("placeholder")
+	console.log(new Date().toLocaleString() + " - created discord message " + message.id)
+	client.destroy()
+})()
