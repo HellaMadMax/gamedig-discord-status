@@ -2,7 +2,7 @@
 Library which uses [gamedig](https://github.com/gamedig/node-gamedig) and [discord.js](https://github.com/discordjs/discord.js) to show the player count and map of a game server as a discord message or bot activity status.  
 Can also report if the game server has gone down and send a discord message to report it.
 
-### Images
+## Images
 ![image](https://user-images.githubusercontent.com/3245005/166130950-600aba69-9ba8-44a5-a7bd-3eac3307e3e1.png)
 ![image](https://user-images.githubusercontent.com/3245005/166131252-4d127c39-c04f-45ad-8fdb-90d03f433012.png)
 ![image](https://user-images.githubusercontent.com/3245005/166130960-45d309b5-1baf-4a51-807d-e5d845a82cc8.png)
@@ -29,9 +29,7 @@ let hll1 = new GameServer({
 }).query()
 ```
 
-## Options
-
-### GameServer options
+## GameServer options
 
 Most of the options are [gamedig query options](https://github.com/gamedig/node-gamedig#query-options) (**host** and **port** are required) with a few different defaults:
 * **type**: "protocol-valve"
@@ -58,9 +56,12 @@ Non-GameDig options:
 * **reportPrefixDown**: string - Prefix this message when reporting server not responding, useful for mentions
 * **reportPrefixUp**: string - Prefix this message when reporting server started responding, useful for mentions
 
-### Map formatting
+## Functions
 
-You can either use **addMap** to add exact map names:
+* **setProp(name, value)**: Set any GameServer property/function (allows chaining)
+* **addMap(map, name)**: Add name to be shown instead of the map name, useful for games with weird internal map names (allows chaining)
+
+Example:
 ```javascript
 const GameServer = require('gamedig-discord-status')
 let hll1 = new GameServer({id: "Official Hell Let Loose Aus #1", type: "hll", host: "176.57.135.34", port: 28015})
@@ -75,19 +76,11 @@ let hll1 = new GameServer({id: "Official Hell Let Loose Aus #1", type: "hll", ho
 .addMap("Utah", "Utah Beach")
 .query()
 ```
-Or use **getMap** event to format it programmatically
-```javascript
-.on("getMap", function(event) {
-	if (event.map == "de_") {
-		event.map = event.map.substr(3)
-	}
-})
-```
 
-### Events
+## Events
 
-* **getMap** (event) - used by **getActivity**/**getMessage** for map
-* **getGame** (event) - used by **getMessage** for game field
+* **getMap** (event.map) - used by **getActivity**/**getMessage** for map
+* **getGame** (event.game) - used by **getMessage** for game field
 * **getActivity** (activity) - used to format activity when **updateActivity** is enabled
 * **getMessage** (message) - used to format discord messages when sending or editing them (**updateMessage**/**reportDown**/**reportUp**)
 * **updateActivity** (activity) - when **updateActivity** is called
@@ -104,6 +97,15 @@ Or use **getMap** event to format it programmatically
 * **messageChange** (from, to) - when message text has changed
 * **reportDown** () - after **queryError** when previous response was valid
 * **reportUp** () - after **query** when previous response was error
+
+Example:
+```javascript
+.on("getMap", function(event) {
+	if (event.map == "de_") {
+		event.map = event.map.substr(3)
+	}
+})
+```
 
 ## Notes
 
@@ -187,7 +189,7 @@ query 176.57.135.34:28015 => connect 176.57.135.34:28000
 query 176.57.135.34:28215 => connect 176.57.135.34:28200
 
 ### Discord message edit
-When updating status via updateMessage the messageID MUST be one created by the bot, otherwise it will throw an error when attempting to edit it
+When updating status via updateMessage the messageID MUST be one created by the bot, otherwise it will throw an error when attempting to edit it  
 You can easily make a placeholder message by running the createmsg script and using the returned message ID
 ```
 npm run createmsg (login token) (channel ID)

@@ -54,6 +54,10 @@ class GameServer extends EventEmitter {
 		this.lastOnline = true
 		this.mapNames = new Map()
 	}
+	setProp(name, value) {
+		this[name] = value
+		return this
+	}
 	addMap(map, name) {
 		this.mapNames.set(map, name)
 		return this
@@ -236,6 +240,9 @@ class GameServer extends EventEmitter {
 			this.options.client.on("debug", (msg) => console.log(new Date().toLocaleString() + " - '" + this.options.id + "' - [DISCORD DEBUG] " + msg))
 		}
 	}
+	async queryServer() {
+		return await this.GameDig.queryRunner.run(this.options)
+	}
 	async query() {
 		if (!this.options.id) {
 			this.options.id = this.options.host + ":" + this.options.port
@@ -244,7 +251,7 @@ class GameServer extends EventEmitter {
 			await this.login()
 		}
 		try {
-			this.info = await this.GameDig.queryRunner.run(this.options)
+			this.info = await this.queryServer()
 			this.info.time = Date.now()
 			this.emit("query", this.info)
 		} catch (error) {
